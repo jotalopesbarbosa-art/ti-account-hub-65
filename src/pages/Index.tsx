@@ -1,17 +1,20 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useBills } from '@/hooks/useBills';
 import { getBillStatus } from '@/types/bill';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { BillCard } from '@/components/dashboard/BillCard';
 import { AddBillDialog } from '@/components/dashboard/AddBillDialog';
 import { BillsFilter, FilterType } from '@/components/dashboard/BillsFilter';
+import { Button } from '@/components/ui/button';
 import { 
   Receipt, 
   Clock, 
   AlertTriangle, 
   CheckCircle2, 
   Wallet,
-  Server
+  Server,
+  TrendingUp
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -75,7 +78,15 @@ const Index = () => {
                 <p className="text-sm text-muted-foreground">Gestão de contas do time de T.I</p>
               </div>
             </div>
-            <AddBillDialog onAdd={addBill} />
+            <div className="flex items-center gap-3">
+              <Link to="/analytics">
+                <Button variant="outline" className="gap-2">
+                  <TrendingUp className="h-4 w-4" />
+                  Analytics
+                </Button>
+              </Link>
+              <AddBillDialog onAdd={addBill} />
+            </div>
           </div>
         </div>
       </header>
