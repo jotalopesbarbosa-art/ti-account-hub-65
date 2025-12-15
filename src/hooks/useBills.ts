@@ -57,14 +57,37 @@ export const useBills = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(bills));
   }, [bills]);
 
-  const addBill = (bill: Omit<Bill, 'id' | 'isProtocoled' | 'createdAt'>) => {
-    const newBill: Bill = {
-      ...bill,
-      id: crypto.randomUUID(),
-      isProtocoled: false,
-      createdAt: new Date().toISOString(),
-    };
-    setBills((prev) => [...prev, newBill]);
+  const addBill = (
+    bill: Omit<Bill, 'id' | 'isProtocoled' | 'createdAt'>,
+    recurrence?: { intervalDays: number; count: number }
+  ) => {
+    const newBills: Bill[] = [];
+
+    if (recurrence && recurrence.count > 1) {
+      const baseDate = new Date(bill.dueDate);
+      
+      for (let i = 0; i < recurrence.count; i++) {
+        const dueDate = new Date(baseDate);
+        dueDate.setDate(dueDate.getDate() + (i * recurrence.intervalDays));
+        
+        newBills.push({
+          ...bill,
+          id: crypto.randomUUID(),
+          dueDate: dueDate.toISOString().split('T')[0],
+          isProtocoled: false,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    } else {
+      newBills.push({
+        ...bill,
+        id: crypto.randomUUID(),
+        isProtocoled: false,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    
+    setBills((prev) => [...prev, ...newBills]);
   };
 
   const protocolBill = (id: string) => {
