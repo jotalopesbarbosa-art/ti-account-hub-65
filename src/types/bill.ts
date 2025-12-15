@@ -1,40 +1,47 @@
 export interface Bill {
   id: string;
   name: string;
-  description: string;
+  description?: string; // ✅ deixa opcional (se vc quiser permitir vazio)
   amount: number;
-  dueDate: string;
-  category: 'internet' | 'telefone' | 'software' | 'hardware' | 'outros';
+  dueDate: string; // YYYY-MM-DD
+  category: "internet" | "telefone" | "software" | "hardware" | "outros";
+
   isProtocoled: boolean;
   protocoledAt?: string;
   createdAt: string;
+
+  // ✅ novos (opcionais)
+  invoiceNumber?: string; // número da nota fiscal
+  boletoNumber?: string;  // número do boleto
 }
 
-export type BillStatus = 'pending' | 'due-soon' | 'overdue' | 'protocoled';
+export type BillStatus = "pending" | "due-soon" | "overdue" | "protocoled";
 
-export const getCategoryLabel = (category: Bill['category']): string => {
-  const labels: Record<Bill['category'], string> = {
-    internet: 'Internet',
-    telefone: 'Telefone',
-    software: 'Software',
-    hardware: 'Hardware',
-    outros: 'Outros',
+export const getCategoryLabel = (category: Bill["category"]): string => {
+  const labels: Record<Bill["category"], string> = {
+    internet: "Internet",
+    telefone: "Telefone",
+    software: "Software",
+    hardware: "Hardware",
+    outros: "Outros",
   };
   return labels[category];
 };
 
 export const getBillStatus = (bill: Bill): BillStatus => {
-  if (bill.isProtocoled) return 'protocoled';
-  
+  if (bill.isProtocoled) return "protocoled";
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   const dueDate = new Date(bill.dueDate);
   dueDate.setHours(0, 0, 0, 0);
-  
-  const diffDays = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  
-  if (diffDays < 0) return 'overdue';
-  if (diffDays <= 3) return 'due-soon';
-  return 'pending';
+
+  const diffDays = Math.ceil(
+    (dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (diffDays < 0) return "overdue";
+  if (diffDays <= 3) return "due-soon";
+  return "pending";
 };

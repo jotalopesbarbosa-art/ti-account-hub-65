@@ -1,91 +1,142 @@
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Plus } from 'lucide-react';
-import { Bill } from '@/types/bill';
-import { toast } from 'sonner';
-import { Switch } from '@/components/ui/switch';
+} from "@/components/ui/select";
+import { Plus } from "lucide-react";
+import { Bill } from "@/types/bill";
+import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
+import { addMonths, format, isBefore, startOfDay } from "date-fns";
 
 interface AddBillDialogProps {
-  onAdd: (bill: Omit<Bill, 'id' | 'isProtocoled' | 'createdAt'>, recurrence?: { intervalDays: number; count: number }) => void;
+  onAdd: (
+    bill: Omit<Bill, "id" | "isProtocoled" | "createdAt">,
+    recurrence?: { intervalMonths: number; count: number }
+  ) => void;
+}
+
+// ✅ clamp do dia pro último dia do mês (evita 31 virar mês seguinte)
+function safeDateForDay(year: number, monthIndex0: number, day: number) {
+  const lastDay = new Date(year, monthIndex0 + 1, 0).getDate(); // 0 = último dia do mês anterior
+  const d = Math.min(day, lastDay);
+  return new Date(year, monthIndex0, d, 12, 0, 0); // 12:00 evita treta de fuso/DST
+}
+
+function ymdLocal(date: Date) {
+  return format(date, "yyyy-MM-dd"); // ✅ sem toISOString()
+}
+
+function intervalToMonths(value: string) {
+  // seus selects eram "30/60/90/180/365" mas isso é conceito mensal, não dia real
+  switch (value) {
+    case "30":
+      return 1;
+    case "60":
+      return 2;
+    case "90":
+      return 3;
+    case "180":
+      return 6;
+    case "365":
+      return 12;
+    default:
+      return 1;
+  }
 }
 
 export const AddBillDialog = ({ onAdd }: AddBillDialogProps) => {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
-  const [dueDay, setDueDay] = useState('');
-  const [category, setCategory] = useState<Bill['category']>('internet');
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [dueDay, setDueDay] = useState("");
+  const [category, setCategory] = useState<Bill["category"]>("internet");
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrenceInterval, setRecurrenceInterval] = useState('30');
-  const [recurrenceCount, setRecurrenceCount] = useState('1');
+  const [recurrenceInterval, setRecurrenceInterval] = useState("30");
+  const [recurrenceCount, setRecurrenceCount] = useState("1");
+
+  const resetForm = () => {
+    setName("");
+    setDescription("");
+    setAmount("");
+    setDueDay("");
+    setCategory("internet");
+    setIsRecurring(false);
+    setRecurrenceInterval("30");
+    setRecurrenceCount("1");
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!name.trim() || !amount || !dueDay) {
-      toast.error('Preencha todos os campos obrigatórios');
+
+    const cleanName = name.trim();
+    const cleanDesc = description.trim();
+    const day = Number(dueDay);
+    const value = Number(amount);
+
+    if (!cleanName || !amount || !dueDay) {
+      toast.error("Preencha todos os campos obrigatórios");
       return;
     }
 
-    const day = parseInt(dueDay);
-    if (day < 1 || day > 31) {
-      toast.error('Dia de vencimento deve ser entre 1 e 31');
+    if (!Number.isFinite(day) || day < 1 || day > 31) {
+      toast.error("Dia de vencimento deve ser entre 1 e 31");
       return;
     }
 
-    // Calculate first due date (next occurrence of this day)
-    const today = new Date();
-    let firstDueDate = new Date(today.getFullYear(), today.getMonth(), day);
-    if (firstDueDate <= today) {
-      firstDueDate = new Date(today.getFullYear(), today.getMonth() + 1, day);
+    if (!Number.isFinite(value) || value <= 0) {
+      toast.error("Valor inválido");
+      return;
     }
 
-    const recurrence = isRecurring 
-      ? { intervalDays: parseInt(recurrenceInterval), count: parseInt(recurrenceCount) }
+    // ✅ calcula primeiro vencimento: próxima ocorrência do dia no calendário
+    const today = startOfDay(new Date());
+    let first = safeDateForDay(today.getFullYear(), today.getMonth(), day);
+
+    if (isBefore(first, today) || first.getTime() === today.getTime()) {
+      first = safeDateForDay(today.getFullYear(), today.getMonth() + 1, day);
+    }
+
+    const recurrence = isRecurring
+      ? {
+          intervalMonths: intervalToMonths(recurrenceInterval),
+          count: Math.max(1, Number(recurrenceCount) || 1),
+        }
       : undefined;
 
-    onAdd({
-      name: name.trim(),
-      description: description.trim(),
-      amount: parseFloat(amount),
-      dueDate: firstDueDate.toISOString().split('T')[0],
-      category,
-    }, recurrence);
+    onAdd(
+      {
+        name: cleanName,
+        description: cleanDesc,
+        amount: value,
+        dueDate: ymdLocal(first),
+        category,
+      },
+      recurrence
+    );
 
-    const message = isRecurring 
-      ? `${parseInt(recurrenceCount)} contas cadastradas com sucesso!`
-      : 'Conta cadastrada com sucesso!';
-    toast.success(message);
+    toast.success(
+      isRecurring
+        ? `${recurrence!.count} contas cadastradas com sucesso!`
+        : "Conta cadastrada com sucesso!"
+    );
+
     setOpen(false);
     resetForm();
-  };
-
-  const resetForm = () => {
-    setName('');
-    setDescription('');
-    setAmount('');
-    setDueDay('');
-    setCategory('internet');
-    setIsRecurring(false);
-    setRecurrenceInterval('30');
-    setRecurrenceCount('1');
   };
 
   return (
@@ -96,10 +147,12 @@ export const AddBillDialog = ({ onAdd }: AddBillDialogProps) => {
           Nova Conta
         </Button>
       </DialogTrigger>
+
       <DialogContent className="sm:max-w-[500px] bg-card border-border">
         <DialogHeader>
           <DialogTitle>Cadastrar Nova Conta</DialogTitle>
         </DialogHeader>
+
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div className="space-y-2">
             <Label htmlFor="name">Nome da Conta *</Label>
@@ -155,7 +208,10 @@ export const AddBillDialog = ({ onAdd }: AddBillDialogProps) => {
 
           <div className="space-y-2">
             <Label htmlFor="category">Categoria</Label>
-            <Select value={category} onValueChange={(v) => setCategory(v as Bill['category'])}>
+            <Select
+              value={category}
+              onValueChange={(v) => setCategory(v as Bill["category"])}
+            >
               <SelectTrigger className="bg-background/50">
                 <SelectValue />
               </SelectTrigger>
@@ -169,10 +225,12 @@ export const AddBillDialog = ({ onAdd }: AddBillDialogProps) => {
             </Select>
           </div>
 
-          {/* Recurrence Section */}
+          {/* Recorrência */}
           <div className="border border-border rounded-lg p-4 space-y-4">
             <div className="flex items-center justify-between">
-              <Label htmlFor="recurring" className="font-medium">Conta Recorrente</Label>
+              <Label htmlFor="recurring" className="font-medium">
+                Conta Recorrente
+              </Label>
               <Switch
                 id="recurring"
                 checked={isRecurring}
@@ -184,30 +242,36 @@ export const AddBillDialog = ({ onAdd }: AddBillDialogProps) => {
               <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
                 <div className="space-y-2">
                   <Label htmlFor="recurrenceInterval">Intervalo</Label>
-                  <Select value={recurrenceInterval} onValueChange={setRecurrenceInterval}>
+                  <Select
+                    value={recurrenceInterval}
+                    onValueChange={setRecurrenceInterval}
+                  >
                     <SelectTrigger className="bg-background/50">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="30">30 dias (Mensal)</SelectItem>
-                      <SelectItem value="60">60 dias (Bimestral)</SelectItem>
-                      <SelectItem value="90">90 dias (Trimestral)</SelectItem>
-                      <SelectItem value="180">180 dias (Semestral)</SelectItem>
-                      <SelectItem value="365">365 dias (Anual)</SelectItem>
+                      <SelectItem value="30">Mensal</SelectItem>
+                      <SelectItem value="60">Bimestral</SelectItem>
+                      <SelectItem value="90">Trimestral</SelectItem>
+                      <SelectItem value="180">Semestral</SelectItem>
+                      <SelectItem value="365">Anual</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="recurrenceCount">Quantidade</Label>
-                  <Select value={recurrenceCount} onValueChange={setRecurrenceCount}>
+                  <Select
+                    value={recurrenceCount}
+                    onValueChange={setRecurrenceCount}
+                  >
                     <SelectTrigger className="bg-background/50">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
-                        <SelectItem key={n} value={n.toString()}>
-                          {n} {n === 1 ? 'parcela' : 'parcelas'}
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n} {n === 1 ? "parcela" : "parcelas"}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -218,7 +282,11 @@ export const AddBillDialog = ({ onAdd }: AddBillDialogProps) => {
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
               Cancelar
             </Button>
             <Button type="submit" className="bg-primary hover:bg-primary/90">
