@@ -7,15 +7,14 @@ export type FilterType = "all" | "pending" | "overdue" | "protocoled";
 interface BillsFilterProps {
   activeFilter: FilterType;
   onFilterChange: (filter: FilterType) => void;
-  counts: {
-    all: number;
-    pending: number;
-    overdue: number;
-    protocoled: number;
-  };
+  counts: Record<FilterType, number>;
 }
 
-export const BillsFilter = ({ activeFilter, onFilterChange, counts }: BillsFilterProps) => {
+export const BillsFilter = ({
+  activeFilter,
+  onFilterChange,
+  counts,
+}: BillsFilterProps) => {
   const filters: { value: FilterType; label: string; icon: typeof List }[] = [
     { value: "all", label: "Todas", icon: List },
     { value: "pending", label: "Pendentes", icon: Clock },
@@ -24,45 +23,68 @@ export const BillsFilter = ({ activeFilter, onFilterChange, counts }: BillsFilte
   ];
 
   return (
-    // ✅ não deixa quebrar linha; se faltar espaço, rola (e não desce)
-    <div className="w-full overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <div className="flex flex-nowrap items-center justify-end gap-2 min-w-max">
-        {filters.map(({ value, label, icon: Icon }) => {
-          const active = activeFilter === value;
+    <div className="relative w-full">
+      {/* fade nas laterais (cara de app) */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-background to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent" />
 
-          return (
-            <Button
-              key={value}
-              type="button"
-              variant="outline"
-              onClick={() => onFilterChange(value)}
-              className={cn(
-                "h-10 px-3 inline-flex items-center justify-center gap-2 rounded-md",
-                "transition-all duration-200",
-                "whitespace-nowrap",
-                active
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-card/50 hover:bg-card"
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              <span className="text-sm leading-none">{label}</span>
+      {/* barra rolável no mobile */}
+      <div className="w-full overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div
+          className={cn(
+            "flex flex-nowrap items-center gap-2 py-1",
+            "min-w-max",
+            "snap-x snap-mandatory"
+          )}
+        >
+          {filters.map(({ value, label, icon: Icon }) => {
+            const active = activeFilter === value;
 
-              <span
+            return (
+              <Button
+                key={value}
+                type="button"
+                variant="outline"
+                onClick={() => onFilterChange(value)}
                 className={cn(
-                  "ml-1 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-2 text-[11px] leading-none",
+                  "snap-start",
+                  "h-9 sm:h-10",
+                  "px-2.5 sm:px-3",
+                  "inline-flex items-center justify-center gap-2",
+                  "rounded-full", // pill fica bem mais “mobile”
+                  "whitespace-nowrap",
+                  "transition-all duration-200",
                   active
-                    ? "bg-primary-foreground/20 text-primary-foreground"
-                    : "bg-muted text-foreground"
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card/60 hover:bg-card border-border/60"
                 )}
               >
-                {counts[value]}
-              </span>
-            </Button>
-          );
-        })}
+                <Icon className="h-4 w-4 shrink-0" />
+
+                {/* no mobile some o texto pra não ficar um trambolho */}
+                <span className="hidden sm:inline text-sm leading-none">
+                  {label}
+                </span>
+
+                <span
+                  className={cn(
+                    "inline-flex items-center justify-center",
+                    "h-5 sm:h-5",
+                    "min-w-[1.25rem]",
+                    "rounded-full px-1.5",
+                    "text-[11px] leading-none",
+                    active
+                      ? "bg-primary-foreground/20 text-primary-foreground"
+                      : "bg-muted text-foreground"
+                  )}
+                >
+                  {counts[value]}
+                </span>
+              </Button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
-
 };

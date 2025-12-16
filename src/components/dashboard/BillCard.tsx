@@ -15,7 +15,7 @@ import {
   MoreHorizontal,
   Trash2,
 } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   DropdownMenu,
@@ -42,58 +42,84 @@ const categoryIcons = {
   outros: MoreHorizontal,
 } as const;
 
-export const BillCard = ({ bill, onProtocol, onDelete, delay = 0 }: BillCardProps) => {
-  const status = getBillStatus(bill);
-  const CategoryIcon = categoryIcons[bill.category];
+const statusConfig = {
+  pending: {
+    label: "Pendente",
+    className: "bg-primary/10 text-primary border-primary/20",
+    icon: Clock,
+  },
+  "due-soon": {
+    label: "Vence já já",
+    className: "bg-warning/10 text-warning border-warning/20",
+    icon: AlertTriangle,
+  },
+  overdue: {
+    label: "Vencida",
+    className: "bg-destructive/10 text-destructive border-destructive/20",
+    icon: AlertTriangle,
+  },
+  protocoled: {
+    label: "Protocolada",
+    className: "bg-success/10 text-success border-success/20",
+    icon: CheckCircle2,
+  },
+} as const;
 
+type KnownStatus = keyof typeof statusConfig;
+
+function safeDate(input: any): Date | null {
+  if (!input) return null;
+  if (input instanceof Date) return isNaN(input.getTime()) ? null : input;
+
+  const s = String(input).trim();
+  if (!s) return null;
+
+  // 👇 date-only (yyyy-MM-dd) => cria local (12:00)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split("-").map(Number);
+    const dt = new Date(y, (m ?? 1) - 1, d ?? 1, 12, 0, 0);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+
+  const dt = new Date(s);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+
+export const BillCard = ({ bill, onProtocol, onDelete, delay = 0 }: BillCardProps) => {
   const [protocolOpen, setProtocolOpen] = useState(false);
+
+  const statusRaw = getBillStatus(bill) as string;
+  const status: KnownStatus = (statusRaw in statusConfig ? statusRaw : "pending") as KnownStatus;
+
+  const CategoryIcon =
+    categoryIcons[bill.category as keyof typeof categoryIcons] ?? MoreHorizontal;
 
   // ✅ evita badge vazia (ex: "   ")
   const invoice = useMemo(() => bill.invoiceNumber?.trim(), [bill.invoiceNumber]);
   const boleto = useMemo(() => bill.boletoNumber?.trim(), [bill.boletoNumber]);
-  const hasProtocolRefs = bill.isProtocoled && (!!invoice || !!boleto);
 
-  const statusConfig = {
-    pending: {
-      label: "Pendente",
-      className: "bg-primary/10 text-primary border-primary/20",
-      icon: Clock,
-    },
-    "due-soon": {
-      label: "Vence já já",
-      className: "bg-warning/10 text-warning border-warning/20",
-      icon: AlertTriangle,
-    },
-    overdue: {
-      label: "Vencida",
-      className: "bg-destructive/10 text-destructive border-destructive/20",
-      icon: AlertTriangle,
-    },
-    protocoled: {
-      label: "Protocolada",
-      className: "bg-success/10 text-success border-success/20",
-      icon: CheckCircle2,
-    },
-  } as const;
+  const hasProtocolRefs = useMemo(() => {
+    return !!bill.isProtocoled && (!!invoice || !!boleto);
+  }, [bill.isProtocoled, invoice, boleto]);
 
-  const StatusIcon = statusConfig[status].icon;
-  const dueDate = new Date(bill.dueDate);
+  const dueDate = useMemo(() => safeDate((bill as any).dueDate), [bill]);
+  const protocoledAt = useMemo(() => safeDate((bill as any).protocoledAt), [bill]);
 
-  const subtitle = (() => {
-    if (bill.isProtocoled && bill.protocoledAt) {
-      return `Protocolada ${formatDistanceToNow(new Date(bill.protocoledAt), {
-        locale: ptBR,
-        addSuffix: true,
-      })}`;
+  const subtitle = useMemo(() => {
+    if (bill.isProtocoled && protocoledAt) {
+      return `Protocolada ${formatDistanceToNow(protocoledAt, { locale: ptBR, addSuffix: true })}`;
     }
-    if (status === "overdue" && !bill.isProtocoled) {
-      return `Venceu ${formatDistanceToNow(dueDate, { locale: ptBR, addSuffix: true })}`;
-    }
-    if (!bill.isProtocoled) {
+
+    if (!bill.isProtocoled && dueDate) {
+      if (status === "overdue") {
+        return `Venceu ${formatDistanceToNow(dueDate, { locale: ptBR, addSuffix: true })}`;
+      }
       return `Vence ${formatDistanceToNow(dueDate, { locale: ptBR, addSuffix: true })}`;
     }
+
     return "";
-  })();
+  }, [bill.isProtocoled, protocoledAt, dueDate, status]);
 
   const handleOpenProtocol = () => setProtocolOpen(true);
 
@@ -101,6 +127,8 @@ export const BillCard = ({ bill, onProtocol, onDelete, delay = 0 }: BillCardProp
     onProtocol(bill.id, payload);
     setProtocolOpen(false);
   };
+
+  const StatusIcon = statusConfig[status].icon;
 
   return (
     <>
@@ -147,7 +175,7 @@ export const BillCard = ({ bill, onProtocol, onDelete, delay = 0 }: BillCardProp
               <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-1">
                 <span className="flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
-                  {format(dueDate, "dd 'de' MMM", { locale: ptBR })}
+                  {dueDate ? format(dueDate, "dd 'de' MMM", { locale: ptBR }) : "--"}
                 </span>
                 <span className="truncate">{subtitle}</span>
               </div>
@@ -181,7 +209,8 @@ export const BillCard = ({ bill, onProtocol, onDelete, delay = 0 }: BillCardProp
           <div className="flex items-center gap-2 shrink-0">
             <div className="text-right leading-tight">
               <p className="text-base font-bold">
-                {bill.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                {Number(bill.amount || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+
               </p>
               <p className="text-[11px] text-muted-foreground">{getCategoryLabel(bill.category)}</p>
             </div>
@@ -193,6 +222,7 @@ export const BillCard = ({ bill, onProtocol, onDelete, delay = 0 }: BillCardProp
                 onClick={handleOpenProtocol}
                 className="h-8 px-2.5 border-success/30 text-success hover:bg-success/10 hover:text-success"
                 title="Marcar como Protocolada"
+                aria-label="Marcar como Protocolada"
               >
                 <CheckCircle2 className="h-4 w-4" />
               </Button>
@@ -200,7 +230,7 @@ export const BillCard = ({ bill, onProtocol, onDelete, delay = 0 }: BillCardProp
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Mais opções">
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
